@@ -1,3 +1,5 @@
+<img width="1210" height="936" alt="image" src="https://github.com/user-attachments/assets/b94a5289-5ce3-4353-b60e-acefd0bb79f4" />
+
 # CPU Sensor Heatmap
 
 A Node.js tool that generates interactive CPU sensor heatmap dashboards from [CapFrameX](https://www.capframex.com/) benchmark JSON exports.
