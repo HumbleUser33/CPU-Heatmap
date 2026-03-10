@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CPU Heatmap — Warhammer 40,000: Space Marine 2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Consolas, monospace;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { text-align: center; margin-bottom: 5px; font-size: 36px; color: #fff; }
+  .subtitle { text-align: center; margin-bottom: 20px; font-size: 22px; color: #888; }
+
+  /* ── Grid: [pwr-labels][pwr-bar][core-labels][center][l3-vlabel][l3-bar][dram-vlabel][dram-bar][dram-labels] */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 45px 50px 50px 38px minmax(0,1fr) 28px 50px 28px 50px 50px;
+    grid-template-rows: auto 1fr auto;
+    gap: 0;
+    max-width: 1200px;
+    width: 100%;
+    overflow: hidden;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  /* ── Top freq axis ─── col 4 row 1 */
+  .top-axis { grid-column: 5; grid-row: 1; position: relative; height: 32px; margin-bottom: 4px; }
+  .top-axis span { position: absolute; transform: translateX(-50%); font-size: 18px; color: #7ab8f5; white-space: nowrap; }
+
+  /* ── Power scale labels (left) ─── col 1 row 2 */
+  .power-scale {
+    grid-column: 1; grid-row: 2;
+    display: flex; flex-direction: column; justify-content: space-between;
+    align-items: flex-end; padding-right: 3px;
+    font-size: 16px; color: #f5a0a0; text-align: center;
+  }
+  .power-scale span { left: 0; right: 0; text-align: center; }
+
+  /* ── Power bar ─── col 2 row 2 */
+  .power-col {
+    grid-column: 2; grid-row: 2;
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden; margin-right: 1px;
+    background: rgba(190,65,65,0.30);
+  }
+  .power-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── Core labels ─── col 3 row 2 */
+  .core-labels { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; }
+  .core-label-group {
+    display: flex; flex-direction: column; justify-content: start;
+    align-items: flex-end; padding-right: 5px;
+  }
+  .cl-core { font-size: 20px; color: #ccc; font-weight: bold; line-height: 27px; }
+  .cl-thread { font-size: 16px; color: #999; line-height: 27px; margin-top: 0; }
+
+  /* ── Avg load squares ─── col 4 row 2 */
+  .avg-load-col { grid-column: 4; grid-row: 2; display: flex; flex-direction: column; padding-left: 2px; }
+  .avg-load-group { margin-bottom: 3px; }
+  .avg-load-spacer { height: 26px; margin-bottom: 1px; }
+  .avg-load-square {
+    width: 36px; height: 26px; margin-bottom: 1px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: bold; color: #fff;
+    border-radius: 2px;
+    text-shadow: 0 0 3px rgba(0,0,0,0.8);
+  }
+
+  /* ── Center body ─── col 4 row 2 */
+  .center-body { grid-column: 5; grid-row: 2; display: flex; flex-direction: column; }
+  .hbar { display: flex; overflow: hidden; border-radius: 2px; }
+  .hbar.freq-bar { background: rgba(30,60,130,0.50); }
+  .hbar.load-bar { background: rgba(25,90,40,0.40); }
+  .hcell { flex: 1; min-width: 0; }
+  .core-group { margin-bottom: 3px; }
+  .core-group .hbar { height: 26px; margin-bottom: 1px; }
+
+  /* ── L3 vertical label ─── col 5 row 2 */
+  .l3-vlabel {
+    grid-column: 6; grid-row: 2;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #c4a8e0; font-weight: bold;
+    transform: rotate(180deg);
+    padding: 0 1px;
+  }
+  /* ── L3 outer wrapper ─── col 6 row 2 */
+  .l3-outer {
+    grid-column: 7; grid-row: 2;
+    position: relative;
+  }
+  .l3-scale-label {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 18px; color: #c4a8e0; white-space: nowrap;
+  }
+  /* ── L3 bar ─── */
+  .l3-col {
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden;
+    background: rgba(80,30,120,0.45);
+    height: 100%;
+  }
+  .l3-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── DRAM vertical label ─── col 7 row 2 */
+  .dram-vlabel {
+    grid-column: 8; grid-row: 2;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #c0a0e0; font-weight: bold;
+    transform: rotate(180deg);
+    margin-left: 4px; padding: 0 1px;
+  }
+  /* ── DRAM bar ─── col 8 row 2 */
+  .dram-col {
+    grid-column: 9; grid-row: 2;
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden;
+    background: rgba(140,100,200,0.30);
+  }
+  .dram-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── DRAM scale labels (right) ─── col 9 row 2 */
+  .dram-scale {
+    grid-column: 10; grid-row: 2;
+    display: flex; flex-direction: column; justify-content: space-between;
+    align-items: flex-start; padding-left: 3px;
+    font-size: 16px; color: #c0a0e0; text-align: center;
+  }
+  .dram-scale span { left: 0; right: 0; text-align: center; }
+
+  /* ── Bottom axes row ─── row 3 */
+  .bottom-axis { grid-column: 5; grid-row: 3; position: relative; height: 32px; margin-top: 4px; }
+  .bottom-axis span { position: absolute; transform: translateX(-50%); font-size: 18px; color: #8fd48f; white-space: nowrap; }
+  .bottom-spacer { grid-column: 1 / 5; grid-row: 3; }
+  .bottom-right-spacer { grid-column: 6 / 11; grid-row: 3; }
+
+  /* ── Legend ──────────────────────────────────────── */
+  .legend-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin-top: 16px; font-size: 20px; color: #aaa; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 20px; height: 20px; border-radius: 3px; border: 1px solid #555; }
+  .legend-gradient-wrap { display: flex; align-items: center; gap: 6px; margin-left: 20px; }
+  .legend-gradient { border-radius: 3px; }
+
+  /* ── Tooltip ────────────────────────────────────── */
+  .tooltip {
+    position: fixed; background: rgba(0,0,0,0.92); color: #fff;
+    padding: 8px 14px; border-radius: 4px; font-size: 18px;
+    pointer-events: none; display: none; z-index: 999;
+    border: 1px solid #444;
+  }
+</style>
+</head>
+<body>
+
+<h1>CPU Sensor Heatmap</h1>
+<div class="subtitle">Warhammer 40,000: Space Marine 2 | AMD Ryzen 7 7800X3D | NVIDIA GeForce RTX 4080 SUPER | 299.8 sec</div>
+
+<div class="dashboard" id="dashboard"></div>
+<div class="legend-bar" id="legend"></div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {"info":{"gameName":"Warhammer 40,000: Space Marine 2","processor":"AMD Ryzen 7 7800X3D","gpu":"NVIDIA GeForce RTX 4080 SUPER","duration":299.8},"freq":{"unit":"MHz","bucketMin":3900,"bucketMax":5200,"step":10,"globalMax":103.257},"load":{"unit":"%","bucketMin":0,"bucketMax":100,"step":1,"globalMax":31.847},"coreGroups":[{"coreNum":1,"freqRow":{"label":"Core 1","name":"Core #1","hist":[0,0,0,0,0,0,0,0,0,0.26,0,0,0,0.26,0,0.266,0,0,0.785,0,1.309,0,3.664,0,10.497,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.051,0,1.586,0,0,2.143,0,0,4.725,0,9.503,0,0,8.726,0,6.814,0,0,16.277,0,29.194,0,0,56.522,0,0,66.649,0,79.579,0,0,0]},"loadRows":[{"label":"Core 1 T1","name":"Core #1  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0.264,0.521,1.055,1.051,1.054,1.072,0.52,1.064,2.134,4.209,6.317,7.909,9.417,15.511,15.23,18.749,19.422,21.017,22.093,18.405,19.407,13.868,12.36,14.919,11.833,10.244,7.331,8.216,6.279,6.297,4.468,3.702,4.237,1.045,1.838,1.554,1.844,1.274,1.026,0.276,0.256,0.261,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":59.3},{"label":"Core 1 T2","name":"Core #1  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.521,0.266,0,0.521,1.585,2.101,2.11,3.675,5.826,7.365,12.838,12.327,17.647,19.733,27.592,23.908,29.161,22.629,18.589,13.148,11.326,7.858,11.567,9.015,6.886,6.013,5.525,3.649,4.178,3.157,1.837,2.344,1.802,1.289,0.792,0.259,0.25,0.257,0,0.264,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":61.7}]},{"coreNum":2,"freqRow":{"label":"Core 2","name":"Core #2","hist":[0,0,0,0,0,0,0,0,0,1.584,0,0.525,0,0.541,0,1.054,0,0,1.323,0,1.578,0,5.243,0,11.806,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.051,0,1.871,0,0,2.129,0,0,4.732,0,7.905,0,0,8.732,0,8.09,0,0,14.97,0,30.257,0,0,57.235,0,0,64.661,0,74.523,0,0,0]},"loadRows":[{"label":"Core 2 T1","name":"Core #2  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0.26,0,0.795,1.05,0.805,1.048,2.113,0.786,1.326,1.842,4.207,6.05,6.853,12.59,17.906,13.699,19.991,20.488,18.679,25.169,18.965,16.239,17.855,12.602,11.612,9.746,9.957,8.116,5.549,8.141,5.496,3.97,2.094,4.189,1.814,2.091,2.621,0.774,1.312,0.489,0,0,0,0.26,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":59.9},{"label":"Core 2 T2","name":"Core #2  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.259,0.521,0,0.527,1.31,0.813,0.532,0.264,0.52,1.852,2.384,3.428,4.734,6.831,8.123,11.069,11.567,12.563,20.438,20.475,22.635,21.825,16.002,15.769,14.515,15.753,9.519,8.889,6.621,8.399,6.046,5.779,6.3,6.606,4.748,4.731,3.662,2.886,2.353,2.052,1.319,0.77,0.798,1.059,1.021,0.788,0.755,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":56.5}]},{"coreNum":3,"freqRow":{"label":"Core 3","name":"Core #3","hist":[0,0,0,0,0,0,0,0,0,1.318,0,1.044,0,1.05,0,0.268,0,0,1.824,0,3.397,0,3.381,0,14.672,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.051,0,2.132,0,0,3.436,0,0,4.739,0,7.654,0,0,10.039,0,9.206,0,0,15.013,0,30.991,0,0,53.341,0,0,65.708,0,69.546,0,0,0]},"loadRows":[{"label":"Core 3 T1","name":"Core #3  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0.529,1.314,0.798,1.832,1.847,1.572,3.175,5.838,6.028,8.395,12.062,17.103,16.877,17.92,20.989,25.189,29.121,23.582,19.191,17.373,13.914,8.711,7.673,8.374,6.083,4.719,3.428,4.167,2.904,1.555,2.905,1.288,1.049,0.264,0.248,0.526,0.495,0.512,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":56.1},{"label":"Core 3 T2","name":"Core #3  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.266,0,1.049,1.045,2.374,1.052,1.074,3.138,2.103,5.014,6.287,9.99,12.329,13.7,18.941,25.222,24.966,21.016,26.235,17.625,19.725,14.23,13.418,11.526,6.875,9.231,6.293,4.991,2.89,2.366,2.618,3.127,3.097,1.319,2.346,0.53,0.499,1.047,0.256,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":55}]},{"coreNum":4,"freqRow":{"label":"Core 4","name":"Core #4","hist":[0,0,0,0,0,0,0,0,0,2.096,0,0.263,0,0.526,0,0,0,0,1.31,0,2.612,0,6.051,0,13.634,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.05,0,1.315,0,0,3.435,0,0,5.796,0,6.051,0,0,9.234,0,10.256,0,0,17.933,0,32.314,0,0,51.458,0,0,62.872,0,71.604,0,0,0]},"loadRows":[{"label":"Core 4 T1","name":"Core #4  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.52,0.522,0,1.057,0.532,0.529,1.323,2.655,2.901,4.216,6.294,7.127,9.974,13.92,17.336,17.554,20.53,24.998,24.204,23.624,16.543,16.539,15.262,14.988,8.144,8.955,6.058,5.792,4.706,4.994,3.131,3.387,1.843,1.307,2.093,2.647,0.517,0.521,1.018,1.042,0.239,0.268,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":54.9},{"label":"Core 4 T2","name":"Core #4  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0.526,0.523,1.315,1.58,1.328,0.524,1.839,4.512,1.845,7.609,8.916,12.362,17.619,15.759,20.21,24.695,27.128,22.022,17.368,14.747,16.773,13.117,10.581,8.885,6.047,7.434,6.047,4.963,3.449,4.726,2.871,1.552,2.893,1.003,1.847,2.08,1.058,0.258,0.792,0.496,0.25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":55.5}]},{"coreNum":5,"freqRow":{"label":"Core 5","name":"Core #5","hist":[0,0,0,0,0,0,0,0,0,1.565,0,1.048,0,1.344,0,0.528,0,0,1.829,0,2.865,0,5.491,0,14.147,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.79,0,2.11,0,0,2.899,0,0,6.057,0,8.412,0,0,6.047,0,8.398,0,0,12.882,0,33.405,0,0,51.787,0,0,62.404,0,75.802,0,0,0]},"loadRows":[{"label":"Core 5 T1","name":"Core #5  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.519,0.263,0.786,1.074,1.317,2.373,2.11,3.436,5.799,4.457,8.133,9.195,15.237,17.404,19.509,24.663,24.682,24.719,22.124,18.295,19.699,10.785,11.82,10.275,5.765,6.048,5.532,5.536,5.483,1.571,3.148,1.559,1.309,1.825,1.058,0.768,0,0.529,0.52,0.485,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":54.4},{"label":"Core 5 T2","name":"Core #5  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0.261,0.783,1.582,0.531,0.807,1.583,2.089,3.961,4.443,5.031,8.937,10.517,13.105,19.989,20.452,24.462,26.867,18.887,25.512,17.071,16.831,13.911,10.006,10.241,5.262,4.987,6.345,5.508,3.136,2.361,1.038,4.689,2.095,1.843,2.108,0.781,0.784,0.268,0.485,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":54.4}]},{"coreNum":6,"freqRow":{"label":"Core 6","name":"Core #6","hist":[0,0,0,0,0,0,0,0,0,1.585,0,1.574,0,0.525,0,0.524,0,0,2.358,0,4.982,0,8.609,0,16.78,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.79,0,1.317,0,0,2.363,0,0,5.27,0,8.444,0,0,8.162,0,8.948,0,0,13.431,0,31.056,0,0,49.976,0,0,58.861,0,74.255,0,0,0]},"loadRows":[{"label":"Core 6 T1","name":"Core #6  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0,0,0.259,0,0.789,1.051,2.1,1.328,4.247,4.738,4.746,8.103,12.621,8.955,15.529,15.237,24.205,23.678,24.93,24.7,19.081,15.053,10.785,12.317,10.502,10.217,6.052,7.418,5.009,4.206,3.114,3.951,3.673,1.842,0.768,1.867,2.32,1.58,0.264,0.767,0.526,0.503,0.518,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":54.1},{"label":"Core 6 T2","name":"Core #6  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.259,0,0,0.261,0.263,0.792,1.313,1.056,1.863,1.837,2.646,3.679,3.682,8.171,9.19,11.838,18.616,20.798,21.586,22.849,24.945,22.064,21.066,16.779,14.156,10.231,8.408,11.116,7.334,5.306,3.411,4.452,2.63,2.867,3.128,3.64,1.843,1.566,1.314,1.574,0.528,0.518,0.235,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":55.9}]},{"coreNum":7,"freqRow":{"label":"Core 7","name":"Core #7","hist":[0,0,0,0,0,0,0,0,0,0.261,0,0,0,0,0,0,0,0,0.526,0,0.531,0,0.789,0,8.118,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.259,0,1.312,0,0,1.564,0,0,5.276,0,9.232,0,0,7.347,0,7.415,0,0,13.889,0,28.071,0,0,51.26,0,0,69.423,0,94.537,0,0,0]},"loadRows":[{"label":"Core 7 T1","name":"Core #7  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.519,1.044,1.315,1.847,1.586,2.905,7.374,6.314,5.755,10.569,13.657,14.172,14.137,15.565,13.652,17.831,17.839,20.534,16.284,19.441,17.079,18.791,13.637,11.585,10.751,7.851,5.487,4.743,1.848,1.563,1.813,1.29,0.514,0.518,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":67.4},{"label":"Core 7 T2","name":"Core #7  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.261,0.261,0,0.266,0.783,0.549,1.317,0.791,3.678,2.639,3.913,6.315,8.128,8.411,13.371,15.482,15.283,20.038,18.672,21.308,27.019,22.822,23.449,22.547,12.401,13.352,11.327,7.146,4.936,2.114,2.878,2.345,4.21,0.268,0.784,0.261,0.485,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":55.6}]},{"coreNum":8,"freqRow":{"label":"Core 8","name":"Core #8","hist":[0,0,0,0,0,0,0,0,0,0.257,0,0.261,0,0,0,0.522,0,0,1.826,0,3.402,0,10.511,0,18.905,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.259,0,0.787,0,0,2.614,0,0,4.213,0,3.949,0,0,4.463,0,5.008,0,0,11.023,0,21.79,0,0,43.876,0,0,62.887,0,103.257,0,0,0]},"loadRows":[{"label":"Core 8 T1","name":"Core #8  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.263,0.789,1.579,2.611,2.096,5.28,6.831,10.01,14.463,20.243,27.082,24.38,29.68,31.847,27.332,25.248,19.978,14.724,13.705,8.663,3.111,3.38,3.122,2.076,0.268,0.791,0,0,0.258,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":64.7},{"label":"Core 8 T2","name":"Core #8  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.259,0.266,0,0.789,0.261,1.05,1.576,2.638,1.084,2.093,4.489,6.015,10.019,14.143,16.881,22.089,24.455,22.619,22.82,19.686,26.209,17.647,16.29,10.499,13.49,7.074,8.965,4.991,4.19,2.589,2.103,3.937,2.59,2.104,0.797,1.049,0.779,0.262,0.503,0.26,0.25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":52.8}]}],"power":{"unit":"W","bucketMin":50,"bucketMax":70,"step":0.5,"globalMax":29.685,"hist":[0.262,0.526,0.784,1.315,1.597,1.834,1.586,4.214,5.014,7.616,9.462,11.592,8.643,12.894,24.192,29.138,29.685,25.194,14.158,13.386,11.831,13.133,14.754,8.639,6.318,7.425,2.649,3.952,4.485,2.911,3.399,3.379,3.925,1.834,1.843,1.321,2.069,1.062,1.02,0.769,0],"name":"CPU Package"},"l3":{"unit":"%","bucketMin":0,"bucketMax":100,"step":1,"globalMax":39.724,"hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.513,0.512,4.755,9.434,18.13,32.51,35.28,37.285,37.537,39.724,31.515,21.607,14.676,3.953,3.406,1.341,1.829,1.578,2.13,1.835,0.26,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"name":"CPU L3 Hit Rate"},"dram":{"unit":"GB/s","bucketMin":16,"bucketMax":32,"step":0.1,"globalMax":9.769,"hist":[0,0,0,0,0,0,0,0,0,0,0.26,0.523,0.532,0.526,0.522,0,0.795,0.542,0.786,0,0.261,0.265,0,0,0,0,0,0,0,0,0,0.261,0,0,0.288,0.791,0.528,1.047,0,0.26,0.262,0.263,1.575,1.815,1.585,1.57,1.052,1.843,0.788,1.567,2.615,0.787,1.042,0.8,1.829,1.324,1.844,0.787,1.309,1.049,3.177,2.379,1.836,2.617,1.846,2.364,2.903,2.622,2.616,4.98,4.193,3.669,3.928,3.911,5.538,5.011,4.201,5.291,4.48,4.181,5.791,6.805,5.495,7.104,7.085,9.769,5.764,3.986,5.768,8.674,3.166,4.997,3.969,4.465,3.406,4.479,5.516,2.898,3.699,5.796,4.182,3.69,3.934,2.884,3.425,2.376,4.208,4.201,3.155,4.186,4.435,2.109,2.632,3.389,3.941,3.426,1.822,2.919,2.849,2.384,1.845,1.049,1.32,2.362,0.505,1.048,1.282,1.832,0.818,0.764,1.307,0.261,0.798,0.264,0.267,0.527,0,0.531,0.532,0.522,0,0.799,0,0.25,0.264,0,0,0,0,0,0,0.248,0,0,0,0,0,0,0,0,0],"name":"CPU DRAM Bandwidth"}};
+
+function heatColor(value, max) {
+  if (max === 0 || value === 0) return 'rgba(0,0,0,0)';
+  const t = value / max;
+  let r, g, b;
+  if (t < 0.5) { const u = t/0.5; r = Math.round(u*255); g = Math.round(180-u*15); b = 0; }
+  else { const u = (t-0.5)/0.5; r = Math.round(255-u*35); g = Math.round(165-u*145); b = 0; }
+  return 'rgba('+r+','+g+','+b+','+(0.3+0.7*t)+')';
+}
+
+function formatVal(v, unit, step) {
+  if (step >= 1) return Math.round(v) + ' ' + unit;
+  return v.toFixed(step < 0.1 ? 2 : 1) + ' ' + unit;
+}
+
+function niceAxisLabels(bMin, bMax, count) {
+  const range = bMax - bMin;
+  const rawStep = range / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const ns = [1,2,5,10].map(m => m*mag).find(c => c >= rawStep) || mag*10;
+  const labels = [];
+  for (let v = Math.ceil(bMin/ns)*ns; v <= bMax; v += ns)
+    labels.push({ value: v, pct: (v-bMin)/range*100 });
+  return labels;
+}
+
+// ── Vertical scale labels (evenly spaced) ──────────
+function makeVScale(cssClass, bMin, bMax, unit, step, count, opts) {
+  opts = opts || {};
+  const div = document.createElement('div');
+  div.className = cssClass;
+  const labels = niceAxisLabels(bMin, bMax, count);
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const s = document.createElement('span');
+    if (opts.multiLine) {
+      s.innerHTML = Math.round(labels[i].value) + '<br>' + unit;
+      s.style.display = 'inline-block';
+      s.style.textAlign = 'center';
+      s.style.lineHeight = '1.1';
+    } else {
+      s.textContent = formatVal(labels[i].value, unit, step);
+    }
+    s.style.position = 'absolute';
+    s.style.bottom = labels[i].pct + '%';
+    s.style.transform = 'translateY(50%)';
+    div.appendChild(s);
+  }
+  div.style.position = 'relative';
+  return div;
+}
+
+const tooltip = document.getElementById('tooltip');
+function wireTooltip(el) {
+  el.addEventListener('mouseover', function(e) {
+    const c = e.target;
+    if (c.dataset.val && parseFloat(c.dataset.val) > 0) {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = c.dataset.name + '<br>@ ' + c.dataset.bv + ' : ' + c.dataset.val + 's';
+    }
+  });
+  el.addEventListener('mousemove', function(e) {
+    tooltip.style.left = (e.clientX+12)+'px'; tooltip.style.top = (e.clientY-30)+'px';
+  });
+  el.addEventListener('mouseout', function() { tooltip.style.display = 'none'; });
+}
+
+function makeHBar(hist, globalMax, chartInfo, cssClass) {
+  const bar = document.createElement('div');
+  bar.className = 'hbar ' + cssClass;
+  for (let i = 0; i < hist.length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'hcell';
+    cell.style.backgroundColor = heatColor(hist[i], globalMax);
+    const bv = chartInfo.bucketMin + i * chartInfo.step;
+    cell.dataset.name = chartInfo.rowName || '';
+    cell.dataset.bv = formatVal(bv, chartInfo.unit, chartInfo.step);
+    cell.dataset.val = hist[i].toFixed(3);
+    bar.appendChild(cell);
+  }
+  wireTooltip(bar);
+  return bar;
+}
+
+function makeVCol(hist, globalMax, chartInfo, cssClass) {
+  const col = document.createElement('div');
+  col.className = cssClass;
+  for (let i = 0; i < hist.length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'vcell';
+    cell.style.backgroundColor = heatColor(hist[i], globalMax);
+    const bv = chartInfo.bucketMin + i * chartInfo.step;
+    cell.dataset.name = chartInfo.name || '';
+    cell.dataset.bv = formatVal(bv, chartInfo.unit, chartInfo.step);
+    cell.dataset.val = hist[i].toFixed(3);
+    col.appendChild(cell);
+  }
+  wireTooltip(col);
+  return col;
+}
+
+function makeAxis(cssClass, bMin, bMax, unit, step, count, color) {
+  const div = document.createElement('div');
+  div.className = cssClass;
+  let labels = niceAxisLabels(bMin, bMax, count);
+
+  // Anti-overlap: ensure minimum percentage gap between adjacent labels
+  if (labels.length > 2) {
+    const minGap = 8;
+    const kept = [labels[0]];
+    for (let i = 1; i < labels.length - 1; i++) {
+      if (labels[i].pct - kept[kept.length - 1].pct >= minGap) {
+        kept.push(labels[i]);
+      }
+    }
+    const last = labels[labels.length - 1];
+    if (kept.length > 1 && last.pct - kept[kept.length - 1].pct < minGap) {
+      kept.pop(); // remove second-to-last if too close to last
+    }
+    kept.push(last);
+    labels = kept;
+  }
+
+  for (let idx = 0; idx < labels.length; idx++) {
+    const l = labels[idx];
+    const s = document.createElement('span');
+    s.style.color = color;
+    s.textContent = formatVal(l.value, unit, step);
+    s.style.left = l.pct + '%';
+    // Edge labels: clamp alignment to stay within bar boundaries
+    if (l.pct <= 2) {
+      s.style.transform = 'translateX(0)';       // left-align at start
+    } else if (l.pct >= 98) {
+      s.style.transform = 'translateX(-100%)';   // right-align at end
+    }
+    // else: CSS default translateX(-50%) centers the label
+    div.appendChild(s);
+  }
+  return div;
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════
+(function() {
+  const db = document.getElementById('dashboard');
+
+  // ── Row 1: Top freq axis (col 4) ──
+  const topAx = makeAxis('top-axis', DATA.freq.bucketMin, DATA.freq.bucketMax,
+    DATA.freq.unit, DATA.freq.step, 8, '#7ab8f5');
+  db.appendChild(topAx);
+
+  // ── Row 2: Power scale (col 1) ──
+  if (DATA.power) {
+    db.appendChild(makeVScale('power-scale', DATA.power.bucketMin, DATA.power.bucketMax,
+      DATA.power.unit, DATA.power.step, 10, { multiLine: true }));
+    db.appendChild(makeVCol(DATA.power.hist, DATA.power.globalMax, DATA.power, 'power-col'));
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 2: Core labels (col 3) + Center body (col 4) ──
+  const coreLabelsCol = document.createElement('div');
+  coreLabelsCol.className = 'core-labels';
+  const center = document.createElement('div');
+  center.className = 'center-body';
+
+  for (const group of DATA.coreGroups) {
+    const gDiv = document.createElement('div');
+    gDiv.className = 'core-group';
+
+    // Frequency bar
+    gDiv.appendChild(makeHBar(group.freqRow.hist, DATA.freq.globalMax, {
+      bucketMin: DATA.freq.bucketMin, bucketMax: DATA.freq.bucketMax,
+      step: DATA.freq.step, unit: DATA.freq.unit, rowName: group.freqRow.name
+    }, 'freq-bar'));
+
+    // Load bars
+    for (const lr of group.loadRows) {
+      gDiv.appendChild(makeHBar(lr.hist, DATA.load.globalMax, {
+        bucketMin: DATA.load.bucketMin, bucketMax: DATA.load.bucketMax,
+        step: DATA.load.step, unit: DATA.load.unit, rowName: lr.name
+      }, 'load-bar'));
+    }
+    center.appendChild(gDiv);
+
+    // Core label group: C1 / Th1 / Th2
+    const lbl = document.createElement('div');
+    lbl.className = 'core-label-group';
+    const totalRows = 1 + group.loadRows.length;
+    lbl.style.height = (totalRows * 27 + 3) + 'px';
+
+    const cTxt = document.createElement('span');
+    cTxt.className = 'cl-core';
+    cTxt.textContent = 'C' + group.coreNum;
+    lbl.appendChild(cTxt);
+
+    for (let t = 0; t < group.loadRows.length; t++) {
+      const tTxt = document.createElement('span');
+      tTxt.className = 'cl-thread';
+      tTxt.textContent = 'Th' + (t + 1);
+      lbl.appendChild(tTxt);
+    }
+    coreLabelsCol.appendChild(lbl);
+  }
+
+  db.appendChild(coreLabelsCol);
+
+  // ── Row 2: Avg load squares (col 4) ──
+  const avgLoadCol = document.createElement('div');
+  avgLoadCol.className = 'avg-load-col';
+  for (const group of DATA.coreGroups) {
+    const grpDiv = document.createElement('div');
+    grpDiv.className = 'avg-load-group';
+    // Spacer for freq row
+    const spacer = document.createElement('div');
+    spacer.className = 'avg-load-spacer';
+    grpDiv.appendChild(spacer);
+    for (const lr of group.loadRows) {
+      const sq = document.createElement('div');
+      sq.className = 'avg-load-square';
+      const pct = lr.avgLoad;
+      sq.textContent = Math.round(pct) + '%';
+      sq.style.backgroundColor = pct > 0 ? heatColor(pct, 100) : 'rgba(0,180,0,0.35)';
+      grpDiv.appendChild(sq);
+    }
+    avgLoadCol.appendChild(grpDiv);
+  }
+  db.appendChild(avgLoadCol);
+
+  db.appendChild(center);
+
+  // ── Row 2: L3 vertical label (col 5) + L3 bar (col 6) ──
+  if (DATA.l3) {
+    const l3VL = document.createElement('div');
+    l3VL.className = 'l3-vlabel';
+    l3VL.textContent = 'L3 Cache Hit Rate';
+    db.appendChild(l3VL);
+    const l3Outer = document.createElement('div');
+    l3Outer.className = 'l3-outer';
+    l3Outer.appendChild(makeVCol(DATA.l3.hist, DATA.l3.globalMax, DATA.l3, 'l3-col'));
+    const l3Top = document.createElement('span');
+    l3Top.className = 'l3-scale-label';
+    l3Top.textContent = '100%';
+    l3Top.style.top = '-24px';
+    l3Outer.appendChild(l3Top);
+    const l3Bot = document.createElement('span');
+    l3Bot.className = 'l3-scale-label';
+    l3Bot.textContent = '0%';
+    l3Bot.style.bottom = '-24px';
+    l3Outer.appendChild(l3Bot);
+    db.appendChild(l3Outer);
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 2: DRAM vertical label (col 7) + DRAM bar (col 8) + DRAM scale (col 9) ──
+  if (DATA.dram) {
+    const dVL = document.createElement('div');
+    dVL.className = 'dram-vlabel';
+    dVL.textContent = 'DRAM Bandwidth';
+    db.appendChild(dVL);
+    db.appendChild(makeVCol(DATA.dram.hist, DATA.dram.globalMax, DATA.dram, 'dram-col'));
+    db.appendChild(makeVScale('dram-scale', DATA.dram.bucketMin, DATA.dram.bucketMax,
+      DATA.dram.unit, DATA.dram.step, 6, { multiLine: true }));
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 3: Bottom axis ──
+  const bSpacer = document.createElement('div');
+  bSpacer.className = 'bottom-spacer';
+  db.appendChild(bSpacer);
+  db.appendChild(makeAxis('bottom-axis', DATA.load.bucketMin, DATA.load.bucketMax,
+    DATA.load.unit, DATA.load.step, 10, '#8fd48f'));
+  const brSpacer = document.createElement('div');
+  brSpacer.className = 'bottom-right-spacer';
+  db.appendChild(brSpacer);
+
+  // ── Legend ──
+  const legend = document.getElementById('legend');
+  const items = [
+    { color: 'rgba(30,60,130,0.70)', label: 'Frequency (MHz)' },
+    { color: 'rgba(25,90,40,0.60)', label: 'Thread Load (%)' },
+  ];
+  if (DATA.power) items.push({ color: 'rgba(190,65,65,0.55)', label: 'CPU Power (W)' });
+  if (DATA.l3) items.push({ color: 'rgba(80,30,120,0.65)', label: 'L3 Hit Rate (%)' });
+  if (DATA.dram) items.push({ color: 'rgba(140,100,200,0.55)', label: 'DRAM BW (GB/s)' });
+
+  for (const it of items) {
+    const li = document.createElement('div'); li.className = 'legend-item';
+    const sw = document.createElement('div'); sw.className = 'legend-swatch';
+    sw.style.backgroundColor = it.color; li.appendChild(sw);
+    const txt = document.createElement('span'); txt.textContent = it.label; li.appendChild(txt);
+    legend.appendChild(li);
+  }
+  const gw = document.createElement('div'); gw.className = 'legend-gradient-wrap';
+  const gMin = document.createElement('span'); gMin.textContent = '0s'; gw.appendChild(gMin);
+  const canvas = document.createElement('canvas'); canvas.className = 'legend-gradient';
+  canvas.width = 140; canvas.height = 14;
+  const ctx = canvas.getContext('2d');
+  for (let x = 0; x < 140; x++) { ctx.fillStyle = heatColor(x/139, 1); ctx.fillRect(x,0,1,14); }
+  gw.appendChild(canvas);
+  const gMax = document.createElement('span'); gMax.textContent = 'max'; gw.appendChild(gMax);
+  legend.appendChild(gw);
+})();
+</script>
+</body>
+</html>

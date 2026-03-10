@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CPU Heatmap — Call of Duty: Modern Warfare 2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Consolas, monospace;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { text-align: center; margin-bottom: 5px; font-size: 36px; color: #fff; }
+  .subtitle { text-align: center; margin-bottom: 20px; font-size: 22px; color: #888; }
+
+  /* ── Grid: [pwr-labels][pwr-bar][core-labels][center][l3-vlabel][l3-bar][dram-vlabel][dram-bar][dram-labels] */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 45px 50px 50px 38px minmax(0,1fr) 28px 50px 28px 50px 50px;
+    grid-template-rows: auto 1fr auto;
+    gap: 0;
+    max-width: 1200px;
+    width: 100%;
+    overflow: hidden;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  /* ── Top freq axis ─── col 4 row 1 */
+  .top-axis { grid-column: 5; grid-row: 1; position: relative; height: 32px; margin-bottom: 4px; }
+  .top-axis span { position: absolute; transform: translateX(-50%); font-size: 18px; color: #7ab8f5; white-space: nowrap; }
+
+  /* ── Power scale labels (left) ─── col 1 row 2 */
+  .power-scale {
+    grid-column: 1; grid-row: 2;
+    display: flex; flex-direction: column; justify-content: space-between;
+    align-items: flex-end; padding-right: 3px;
+    font-size: 16px; color: #f5a0a0; text-align: center;
+  }
+  .power-scale span { left: 0; right: 0; text-align: center; }
+
+  /* ── Power bar ─── col 2 row 2 */
+  .power-col {
+    grid-column: 2; grid-row: 2;
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden; margin-right: 1px;
+    background: rgba(190,65,65,0.30);
+  }
+  .power-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── Core labels ─── col 3 row 2 */
+  .core-labels { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; }
+  .core-label-group {
+    display: flex; flex-direction: column; justify-content: start;
+    align-items: flex-end; padding-right: 5px;
+  }
+  .cl-core { font-size: 20px; color: #ccc; font-weight: bold; line-height: 27px; }
+  .cl-thread { font-size: 16px; color: #999; line-height: 27px; margin-top: 0; }
+
+  /* ── Avg load squares ─── col 4 row 2 */
+  .avg-load-col { grid-column: 4; grid-row: 2; display: flex; flex-direction: column; padding-left: 2px; }
+  .avg-load-group { margin-bottom: 3px; }
+  .avg-load-spacer { height: 26px; margin-bottom: 1px; }
+  .avg-load-square {
+    width: 36px; height: 26px; margin-bottom: 1px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: bold; color: #fff;
+    border-radius: 2px;
+    text-shadow: 0 0 3px rgba(0,0,0,0.8);
+  }
+
+  /* ── Center body ─── col 4 row 2 */
+  .center-body { grid-column: 5; grid-row: 2; display: flex; flex-direction: column; }
+  .hbar { display: flex; overflow: hidden; border-radius: 2px; }
+  .hbar.freq-bar { background: rgba(30,60,130,0.50); }
+  .hbar.load-bar { background: rgba(25,90,40,0.40); }
+  .hcell { flex: 1; min-width: 0; }
+  .core-group { margin-bottom: 3px; }
+  .core-group .hbar { height: 26px; margin-bottom: 1px; }
+
+  /* ── L3 vertical label ─── col 5 row 2 */
+  .l3-vlabel {
+    grid-column: 6; grid-row: 2;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #c4a8e0; font-weight: bold;
+    transform: rotate(180deg);
+    padding: 0 1px;
+  }
+  /* ── L3 outer wrapper ─── col 6 row 2 */
+  .l3-outer {
+    grid-column: 7; grid-row: 2;
+    position: relative;
+  }
+  .l3-scale-label {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 18px; color: #c4a8e0; white-space: nowrap;
+  }
+  /* ── L3 bar ─── */
+  .l3-col {
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden;
+    background: rgba(80,30,120,0.45);
+    height: 100%;
+  }
+  .l3-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── DRAM vertical label ─── col 7 row 2 */
+  .dram-vlabel {
+    grid-column: 8; grid-row: 2;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #c0a0e0; font-weight: bold;
+    transform: rotate(180deg);
+    margin-left: 4px; padding: 0 1px;
+  }
+  /* ── DRAM bar ─── col 8 row 2 */
+  .dram-col {
+    grid-column: 9; grid-row: 2;
+    display: flex; flex-direction: column-reverse;
+    border-radius: 4px; overflow: hidden;
+    background: rgba(140,100,200,0.30);
+  }
+  .dram-col .vcell { flex: 1; min-height: 0; }
+
+  /* ── DRAM scale labels (right) ─── col 9 row 2 */
+  .dram-scale {
+    grid-column: 10; grid-row: 2;
+    display: flex; flex-direction: column; justify-content: space-between;
+    align-items: flex-start; padding-left: 3px;
+    font-size: 16px; color: #c0a0e0; text-align: center;
+  }
+  .dram-scale span { left: 0; right: 0; text-align: center; }
+
+  /* ── Bottom axes row ─── row 3 */
+  .bottom-axis { grid-column: 5; grid-row: 3; position: relative; height: 32px; margin-top: 4px; }
+  .bottom-axis span { position: absolute; transform: translateX(-50%); font-size: 18px; color: #8fd48f; white-space: nowrap; }
+  .bottom-spacer { grid-column: 1 / 5; grid-row: 3; }
+  .bottom-right-spacer { grid-column: 6 / 11; grid-row: 3; }
+
+  /* ── Legend ──────────────────────────────────────── */
+  .legend-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin-top: 16px; font-size: 20px; color: #aaa; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 20px; height: 20px; border-radius: 3px; border: 1px solid #555; }
+  .legend-gradient-wrap { display: flex; align-items: center; gap: 6px; margin-left: 20px; }
+  .legend-gradient { border-radius: 3px; }
+
+  /* ── Tooltip ────────────────────────────────────── */
+  .tooltip {
+    position: fixed; background: rgba(0,0,0,0.92); color: #fff;
+    padding: 8px 14px; border-radius: 4px; font-size: 18px;
+    pointer-events: none; display: none; z-index: 999;
+    border: 1px solid #444;
+  }
+</style>
+</head>
+<body>
+
+<h1>CPU Sensor Heatmap</h1>
+<div class="subtitle">Call of Duty: Modern Warfare 2 | AMD Ryzen 7 7800X3D | NVIDIA GeForce RTX 4080 SUPER | 299.9 sec</div>
+
+<div class="dashboard" id="dashboard"></div>
+<div class="legend-bar" id="legend"></div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {"info":{"gameName":"Call of Duty: Modern Warfare 2","processor":"AMD Ryzen 7 7800X3D","gpu":"NVIDIA GeForce RTX 4080 SUPER","duration":299.9},"freq":{"unit":"MHz","bucketMin":4000,"bucketMax":5200,"step":10,"globalMax":146.907},"load":{"unit":"%","bucketMin":0,"bucketMax":100,"step":1,"globalMax":31.126},"coreGroups":[{"coreNum":1,"freqRow":{"label":"Core 1","name":"Core #1","hist":[0,0,0,0,0,0,0,0,0,0,0.527,0,1.541,0,12.906,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.034,0,0,1.311,0,3.974,0,0,13.671,0,24.368,0,0,44.572,0,0,49.111,0,146.907,0,0,0]},"loadRows":[{"label":"Core 1 T1","name":"Core #1  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.263,0,0,0.263,0,0,0,0,0,0.266,0,0.26,0.515,0.84,0.259,1.308,0.791,1.828,3.199,2.099,4.244,3.942,9.951,5.759,10.293,9.953,8.379,14.678,9.73,9.693,11.596,14.421,9.426,8.409,11.866,5.766,8.155,9.424,10.78,8.377,8.421,7.718,8.704,6.062,8.94,9.167,5.773,5.292,7.17,5.501,4.484,4.468,3.364,3.696,2.373,2.606,1.813,1.593,1.821,1.037,1.316,0.56,0.525,0.525,0,0.26,0,0],"avgLoad":68.3},{"label":"Core 1 T2","name":"Core #1  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.265,0.279,0.519,1.301,2.107,2.621,5.804,5.254,7.04,7.581,9.505,15.005,12.857,15.293,17.389,16.116,10.154,14.251,10.481,10.223,11.055,7.891,9.457,8.45,7.319,6.788,4.988,5.719,5.151,5.542,3.137,5.508,2.864,5.253,4.207,2.364,2.66,2.875,2.373,1.843,3.666,2.066,2.339,2.877,1.058,1.834,2.109,2.611,3.187,0.786,2.12,1.339,0.521,0.518,1.051,0.533,0.79,0,0.763,0.265,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":43.2}]},{"coreNum":2,"freqRow":{"label":"Core 2","name":"Core #2","hist":[0,0,0,0,0,0,0,0,0.52,0,0.531,0,2.105,0,17.893,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.034,0,0,1.576,0,3.686,0,0,13.464,0,27.025,0,0,45.357,0,0,49.067,0,137.664,0,0,0]},"loadRows":[{"label":"Core 2 T1","name":"Core #2  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0,0.263,0.263,0.545,0.264,1.061,0,2.346,2.094,3.134,1.051,3.157,2.869,3.684,6.595,5.03,5.757,4.47,3.174,7.364,5.794,4.46,5.532,5.536,3.147,4.985,5.55,3.747,4.71,5.248,6.231,4.439,4.98,3.341,6.317,3.202,4.924,4.199,5.459,4.958,5.535,4.22,6.046,7.386,3.696,4.207,4.178,3.942,4.462,6.834,5.011,5.296,5.216,5.777,4.7,6.283,6.048,4.731,2.41,5.754,4.716,2.663,5.244,5.03,3.937,2.379,1.846,1.831,2.875,2.594,2.643,2.071,2.609,1.047,2.114,1.037,0,0.265,0.802,0.272,0.769,0.521,0.785,0,0,0],"avgLoad":54.4},{"label":"Core 2 T2","name":"Core #2  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.27,0.255,0,0.504,0.784,0.527,1.309,0.78,2.137,1.308,1.845,2.637,2.359,2.613,3.419,4.721,6.819,5.216,5.516,6.019,4.192,7.185,6.286,2.874,4.476,3.139,6.573,4.754,4.25,4.175,3.684,3.408,4.177,2.342,4.387,2.437,3.066,1.822,5.004,4.693,3.417,3.156,3.695,3.706,3.693,3.434,3.957,6.039,5.183,3.157,5.535,4.244,6.864,4.975,4.217,4.455,6.014,3.93,5.727,8.634,4.488,7.415,6.065,5.533,5.226,4.193,6.624,6.29,5.01,4.226,1.841,3.398,1.578,2.094,1.282,2.099,1.055,1.044,1.83,1.585,0.261,0,0.531,0.26,0],"avgLoad":58.6}]},{"coreNum":3,"freqRow":{"label":"Core 3","name":"Core #3","hist":[0,0.259,0,0,0,1.359,0,0,2.088,0,4.176,0,7.335,0,56.608,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.558,0,0,1.826,0,3.409,0,0,14.686,0,26.292,0,0,40.698,0,0,48.577,0,91.051,0,0,0]},"loadRows":[{"label":"Core 3 T1","name":"Core #3  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0.279,0,0.787,1.09,1.576,2.364,4.755,3.672,8.929,11.106,12.643,13.12,20.187,18.385,23.811,20.734,18.899,15.784,17.861,18.121,9.698,7.106,6.532,6.288,4.989,4.778,5.764,3.133,3.646,3.161,2.623,3.111,1.837,2.106,2.114,2.103,1.549,1.042,0.797,1.337,0.804,0.539,0.801,0.54,1.587,0.789,0.767,1.571,0.521,0.802,1.053,0.261,0.783,0.264,0,0,0.516,0.507,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":30.9},{"label":"Core 3 T2","name":"Core #3  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0.265,0.521,0.263,0.57,1.794,2.636,3.43,6.286,6.811,9.725,15.731,17.381,19.02,20.159,26.209,21.064,19.42,18.965,18.03,14.939,13.101,9.461,7.359,6.266,5.544,4.707,3.156,3.701,2.61,2.162,3.427,1.058,1.049,1.287,1.307,1.31,0.541,1.563,0.538,0.284,0.766,0.776,0.785,0.772,0.265,1.599,0.264,0.263,0,0.262,0,0.26,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":38.7}]},{"coreNum":4,"freqRow":{"label":"Core 4","name":"Core #4","hist":[0,0,0,0,0,0.532,0,0,0.264,0,2.356,0,4.487,0,44.43,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.298,0,0,1.297,0,4.486,0,0,14.433,0,29.776,0,0,44.386,0,0,50.075,0,102.102,0,0,0]},"loadRows":[{"label":"Core 4 T1","name":"Core #4  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.263,0.26,0.263,1.296,1.623,1.304,2.902,4.999,7.37,8.195,14.317,20.237,18.251,21.99,25.604,31.126,25.914,22.366,14.953,14.952,8.133,10.063,6.022,4.188,4.962,2.85,1.845,1.59,1.325,1.32,2.37,1.551,0.782,0.788,1.589,1.033,0.793,0.262,1.596,0.519,0.528,0.266,1.568,0.513,1.054,1.067,0.527,0.266,0.81,0.526,0,0.266,0,0.524,0,0.241,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":38.5},{"label":"Core 4 T2","name":"Core #4  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.265,0,1.035,1.352,2.346,2.934,4.482,4.419,6.591,8.914,16.769,19.392,16.593,20.711,22.993,25.202,25.448,19.646,15.168,15.216,11.836,8.407,5.737,5.793,3.701,3.148,2.139,3.141,2.918,0.512,2.377,1.594,1.815,0.262,0.79,1.314,1.555,2.102,0.826,1.043,0.241,1.32,1.056,1.31,1.041,0.783,1.042,0.797,0.526,0.26,0.266,0.267,0.265,0.262,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":39.8}]},{"coreNum":5,"freqRow":{"label":"Core 5","name":"Core #5","hist":[0,0,0,0,0,1.319,0,0,2.375,0,4.147,0,8.172,0,48.089,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.298,0,0,1.585,0,5.808,0,0,15.275,0,29.936,0,0,44.099,0,0,41.999,0,95.82,0,0,0]},"loadRows":[{"label":"Core 5 T1","name":"Core #5  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0,0,0.267,0.592,1.625,2.611,4.732,4.96,8.626,10.798,14.874,16.126,22.707,24.398,22.292,27.031,21.834,22.795,16.299,14.875,9.44,8.605,7.382,5.558,4.24,4.166,3.134,2.356,2.608,2.11,2.11,1.041,2.658,0.529,1.05,0.796,0.269,0.788,0.786,0.259,0.779,0.505,0,0,0.26,0.266,0.26,0.265,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":38.9},{"label":"Core 5 T2","name":"Core #5  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.521,0,1.044,1.037,1.548,2.615,3.155,3.645,4.521,8.171,15.218,10.039,14.727,19.721,19.153,22.432,25.189,20.706,19.946,12.077,13.951,11.744,8.953,6.239,6.568,4.752,5.207,3.955,3.371,2.623,3.199,2.868,2.896,1.841,1.588,1.298,1.575,1.048,1.559,0.787,0.525,1.05,1.587,0.532,0.787,0.791,0.778,0,0.815,0.266,0.783,0.521,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":33.9}]},{"coreNum":6,"freqRow":{"label":"Core 6","name":"Core #6","hist":[0,0,0,0,0,0.526,0,0,0.263,0,2.907,0,5.518,0,44.857,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.042,0,0,1.062,0,5.517,0,0,18.653,0,31.803,0,0,44.85,0,0,43.317,0,99.607,0,0,0]},"loadRows":[{"label":"Core 6 T1","name":"Core #6  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0.263,0.313,0.262,1.583,0.78,1.854,5.076,6.573,6.804,10.842,9.977,16.465,23.775,21.258,22.816,24.178,24.061,18.415,16.753,17.056,9.163,7.355,5.74,4.194,3.413,2.632,3.416,2.339,3.443,2.35,2.08,1.845,1.304,1.855,1.048,1.582,1.297,1.3,1.571,0.786,0.522,1.072,1.041,1.043,1.339,0.262,1.315,1.821,0.789,0.522,0.518,0.528,0.523,0,0,0.284,0,0.266,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":41.2},{"label":"Core 6 T2","name":"Core #6  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.265,0.529,0.263,1.298,1.843,1.318,3.155,3.418,4.725,8.145,9.159,9.993,14.945,16.973,22.939,17.383,16.776,17.718,15.238,18.414,12.018,8.147,11.523,7.354,7.333,4.644,5.215,3.686,2.931,4.474,3.105,2.908,1.864,1.537,3.16,2.118,1.618,1.569,2.617,1.324,0.513,1.043,1.855,1.298,1.297,1.324,0.797,1.307,1.304,1.068,0.523,1.576,1.328,1.575,0.794,1.05,1.855,0.799,0.759,1.606,0.769,0.527,0,0.521,0.267,0.26,0,0,0.265,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":34.7}]},{"coreNum":7,"freqRow":{"label":"Core 7","name":"Core #7","hist":[0,0,0,0,0,1.048,0,0,2.617,0,3.129,0,6.029,0,31.286,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.042,0,0,0.251,0,5.49,0,0,17.614,0,31.068,0.262,0,46.559,0,0,40.131,0,113.396,0,0,0]},"loadRows":[{"label":"Core 7 T1","name":"Core #7  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.263,0,0.523,0,1.044,0.779,1.362,3.141,3.706,3.675,6.849,8.156,14.141,19.456,20.492,25.001,25.827,27.363,22.778,24.473,15.722,10.527,11.347,5.817,6.51,5.764,3.164,3.148,4.478,1.863,3.703,2.615,1.829,1.845,2.135,1.052,1.304,0.763,0.521,0.259,0.781,0.261,0.802,0.258,0.525,0.262,0.26,0.265,0,0,0.263,0,0.262,0,0,0.524,0.261,0.266,0,0.489,0,0.529,0,0.263,0,0.256,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":36.4},{"label":"Core 7 T2","name":"Core #7  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.265,0,0,0.775,0.518,1.324,0.577,2.064,3.131,4.498,5.246,7.799,10.772,10.51,14.783,19.517,21.868,23.648,21.511,18.594,20.531,16.792,18.066,17.038,8.706,8.13,8.09,7.1,4.755,3.132,3.419,1.826,1.566,2.869,1.565,2.365,1.057,0.266,0.813,0.8,0.265,0.257,0.265,0.266,0.263,0.241,0.265,0,0.256,0.523,0,0,0,0.261,0,0,0.52,0,0,0,0,0,0.254,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":43.4}]},{"coreNum":8,"freqRow":{"label":"Core 8","name":"Core #8","hist":[0,0,0,0.523,0,0.485,0,0,1.316,0,3.152,0,7.101,0,46.505,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.299,0,0,0.527,0,6.749,0,0,19.7,0,32.157,0,0,38.656,0,0,36.501,0,105.251,0,0,0]},"loadRows":[{"label":"Core 8 T1","name":"Core #8  Thread #1","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.266,0.526,2.092,1.83,3.712,4.968,8.483,10.584,14.364,17.767,25.305,24.628,22.813,26.273,27.583,18.926,16.286,14.143,9.471,7.35,6.789,4.966,3.682,4.22,2.092,3.932,2.138,2.103,1.592,1.819,1.056,2.358,1.053,0.528,1.314,0,0.781,0.763,0.266,0,0.265,0.525,0,0.26,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":38.9},{"label":"Core 8 T2","name":"Core #8  Thread #2","hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0.79,0.258,1.604,1.326,2.384,4.689,5.545,7.633,11.851,13.65,12.63,13.64,20.252,23.735,18.747,23.945,21.529,15.761,12.632,12.102,7.064,8.41,8.912,6.819,4.18,4.973,3.927,4.447,2.812,2.345,3.689,2.136,2.109,2.096,1.073,1.566,1.816,0.527,0.792,0.529,0.799,1.591,0,0.522,0.527,0,0,0.241,0.531,0,0.26,0,0,0,0.266,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"avgLoad":35.3}]}],"power":{"unit":"W","bucketMin":45,"bucketMax":75,"step":0.5,"globalMax":28.417,"hist":[0,0,0,0,0.262,0.57,0.541,0.249,0.787,1.868,2.334,1.793,1.833,3.699,4.983,9.432,13.951,16.76,21.621,28.081,28.417,28.375,21.538,17.585,12.9,8.358,8.158,7.285,5.257,3.392,4.995,2.869,3.37,5.853,3.912,3.152,2.61,0.78,1.317,1.05,2.387,1.318,1.052,2.868,1.309,1.053,1.322,1.839,1.858,0.788,1.581,0.262,0.527,0.52,1.035,0,0.266,0,0,0,0],"name":"CPU Package"},"l3":{"unit":"%","bucketMin":0,"bucketMax":100,"step":1,"globalMax":64.786,"hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.263,0.258,1.054,4.493,10.177,15.771,32.313,55.435,64.786,49.328,34.208,16.533,8.938,5.04,0.263,0.789,0,0.273,0,0,0,0,0,0,0,0,0,0,0,0],"name":"CPU L3 Hit Rate"},"dram":{"unit":"GB/s","bucketMin":7,"bucketMax":23,"step":0.1,"globalMax":10.787,"hist":[0,0,0,0,0,0.26,0.26,0,0.542,0.51,0.263,0.522,0,0.778,0.266,0,0,1.02,0.802,0.267,0.281,2.076,0.523,1.039,0.786,1.844,1.332,1.843,1.591,3.718,3.15,3.398,2.896,4.462,4.707,4.473,6.005,4.453,6.375,5.513,7.095,7.636,6.574,7.763,8.91,10.325,8.415,10.595,8.908,9.983,9.455,10.787,7.343,6.013,6.792,7.676,7.143,6.169,5.221,4.202,3.942,3.158,2.367,3.155,2.871,1.597,3.683,1.581,3.664,4.719,3.97,1.306,3.674,2.342,2.898,1.035,0.796,1.587,1.83,1.03,0.782,1.065,0.263,0.787,0.517,0.523,0,1.063,0.259,1.576,0.517,0,0.774,0.268,0.512,0,0.512,0.261,0.527,0,1.077,0.266,0.523,0.519,0.244,0.534,0,0.797,0.523,0.265,0.787,0.523,1.331,0,0.537,0.261,0,0.535,0.532,0.266,0.256,0,0.263,0.52,0,0,0,0.785,0.262,0,0.778,0,0,0,0.284,0.784,0.28,0,0,0.241,0,0,0.26,0.261,0.266,0,0,0,0,0.261,0,0.264,0,0,0,0,0,0.266,0,0,0],"name":"CPU DRAM Bandwidth"}};
+
+function heatColor(value, max) {
+  if (max === 0 || value === 0) return 'rgba(0,0,0,0)';
+  const t = value / max;
+  let r, g, b;
+  if (t < 0.5) { const u = t/0.5; r = Math.round(u*255); g = Math.round(180-u*15); b = 0; }
+  else { const u = (t-0.5)/0.5; r = Math.round(255-u*35); g = Math.round(165-u*145); b = 0; }
+  return 'rgba('+r+','+g+','+b+','+(0.3+0.7*t)+')';
+}
+
+function formatVal(v, unit, step) {
+  if (step >= 1) return Math.round(v) + ' ' + unit;
+  return v.toFixed(step < 0.1 ? 2 : 1) + ' ' + unit;
+}
+
+function niceAxisLabels(bMin, bMax, count) {
+  const range = bMax - bMin;
+  const rawStep = range / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const ns = [1,2,5,10].map(m => m*mag).find(c => c >= rawStep) || mag*10;
+  const labels = [];
+  for (let v = Math.ceil(bMin/ns)*ns; v <= bMax; v += ns)
+    labels.push({ value: v, pct: (v-bMin)/range*100 });
+  return labels;
+}
+
+// ── Vertical scale labels (evenly spaced) ──────────
+function makeVScale(cssClass, bMin, bMax, unit, step, count, opts) {
+  opts = opts || {};
+  const div = document.createElement('div');
+  div.className = cssClass;
+  const labels = niceAxisLabels(bMin, bMax, count);
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const s = document.createElement('span');
+    if (opts.multiLine) {
+      s.innerHTML = Math.round(labels[i].value) + '<br>' + unit;
+      s.style.display = 'inline-block';
+      s.style.textAlign = 'center';
+      s.style.lineHeight = '1.1';
+    } else {
+      s.textContent = formatVal(labels[i].value, unit, step);
+    }
+    s.style.position = 'absolute';
+    s.style.bottom = labels[i].pct + '%';
+    s.style.transform = 'translateY(50%)';
+    div.appendChild(s);
+  }
+  div.style.position = 'relative';
+  return div;
+}
+
+const tooltip = document.getElementById('tooltip');
+function wireTooltip(el) {
+  el.addEventListener('mouseover', function(e) {
+    const c = e.target;
+    if (c.dataset.val && parseFloat(c.dataset.val) > 0) {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = c.dataset.name + '<br>@ ' + c.dataset.bv + ' : ' + c.dataset.val + 's';
+    }
+  });
+  el.addEventListener('mousemove', function(e) {
+    tooltip.style.left = (e.clientX+12)+'px'; tooltip.style.top = (e.clientY-30)+'px';
+  });
+  el.addEventListener('mouseout', function() { tooltip.style.display = 'none'; });
+}
+
+function makeHBar(hist, globalMax, chartInfo, cssClass) {
+  const bar = document.createElement('div');
+  bar.className = 'hbar ' + cssClass;
+  for (let i = 0; i < hist.length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'hcell';
+    cell.style.backgroundColor = heatColor(hist[i], globalMax);
+    const bv = chartInfo.bucketMin + i * chartInfo.step;
+    cell.dataset.name = chartInfo.rowName || '';
+    cell.dataset.bv = formatVal(bv, chartInfo.unit, chartInfo.step);
+    cell.dataset.val = hist[i].toFixed(3);
+    bar.appendChild(cell);
+  }
+  wireTooltip(bar);
+  return bar;
+}
+
+function makeVCol(hist, globalMax, chartInfo, cssClass) {
+  const col = document.createElement('div');
+  col.className = cssClass;
+  for (let i = 0; i < hist.length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'vcell';
+    cell.style.backgroundColor = heatColor(hist[i], globalMax);
+    const bv = chartInfo.bucketMin + i * chartInfo.step;
+    cell.dataset.name = chartInfo.name || '';
+    cell.dataset.bv = formatVal(bv, chartInfo.unit, chartInfo.step);
+    cell.dataset.val = hist[i].toFixed(3);
+    col.appendChild(cell);
+  }
+  wireTooltip(col);
+  return col;
+}
+
+function makeAxis(cssClass, bMin, bMax, unit, step, count, color) {
+  const div = document.createElement('div');
+  div.className = cssClass;
+  let labels = niceAxisLabels(bMin, bMax, count);
+
+  // Anti-overlap: ensure minimum percentage gap between adjacent labels
+  if (labels.length > 2) {
+    const minGap = 8;
+    const kept = [labels[0]];
+    for (let i = 1; i < labels.length - 1; i++) {
+      if (labels[i].pct - kept[kept.length - 1].pct >= minGap) {
+        kept.push(labels[i]);
+      }
+    }
+    const last = labels[labels.length - 1];
+    if (kept.length > 1 && last.pct - kept[kept.length - 1].pct < minGap) {
+      kept.pop(); // remove second-to-last if too close to last
+    }
+    kept.push(last);
+    labels = kept;
+  }
+
+  for (let idx = 0; idx < labels.length; idx++) {
+    const l = labels[idx];
+    const s = document.createElement('span');
+    s.style.color = color;
+    s.textContent = formatVal(l.value, unit, step);
+    s.style.left = l.pct + '%';
+    // Edge labels: clamp alignment to stay within bar boundaries
+    if (l.pct <= 2) {
+      s.style.transform = 'translateX(0)';       // left-align at start
+    } else if (l.pct >= 98) {
+      s.style.transform = 'translateX(-100%)';   // right-align at end
+    }
+    // else: CSS default translateX(-50%) centers the label
+    div.appendChild(s);
+  }
+  return div;
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════
+(function() {
+  const db = document.getElementById('dashboard');
+
+  // ── Row 1: Top freq axis (col 4) ──
+  const topAx = makeAxis('top-axis', DATA.freq.bucketMin, DATA.freq.bucketMax,
+    DATA.freq.unit, DATA.freq.step, 8, '#7ab8f5');
+  db.appendChild(topAx);
+
+  // ── Row 2: Power scale (col 1) ──
+  if (DATA.power) {
+    db.appendChild(makeVScale('power-scale', DATA.power.bucketMin, DATA.power.bucketMax,
+      DATA.power.unit, DATA.power.step, 10, { multiLine: true }));
+    db.appendChild(makeVCol(DATA.power.hist, DATA.power.globalMax, DATA.power, 'power-col'));
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 2: Core labels (col 3) + Center body (col 4) ──
+  const coreLabelsCol = document.createElement('div');
+  coreLabelsCol.className = 'core-labels';
+  const center = document.createElement('div');
+  center.className = 'center-body';
+
+  for (const group of DATA.coreGroups) {
+    const gDiv = document.createElement('div');
+    gDiv.className = 'core-group';
+
+    // Frequency bar
+    gDiv.appendChild(makeHBar(group.freqRow.hist, DATA.freq.globalMax, {
+      bucketMin: DATA.freq.bucketMin, bucketMax: DATA.freq.bucketMax,
+      step: DATA.freq.step, unit: DATA.freq.unit, rowName: group.freqRow.name
+    }, 'freq-bar'));
+
+    // Load bars
+    for (const lr of group.loadRows) {
+      gDiv.appendChild(makeHBar(lr.hist, DATA.load.globalMax, {
+        bucketMin: DATA.load.bucketMin, bucketMax: DATA.load.bucketMax,
+        step: DATA.load.step, unit: DATA.load.unit, rowName: lr.name
+      }, 'load-bar'));
+    }
+    center.appendChild(gDiv);
+
+    // Core label group: C1 / Th1 / Th2
+    const lbl = document.createElement('div');
+    lbl.className = 'core-label-group';
+    const totalRows = 1 + group.loadRows.length;
+    lbl.style.height = (totalRows * 27 + 3) + 'px';
+
+    const cTxt = document.createElement('span');
+    cTxt.className = 'cl-core';
+    cTxt.textContent = 'C' + group.coreNum;
+    lbl.appendChild(cTxt);
+
+    for (let t = 0; t < group.loadRows.length; t++) {
+      const tTxt = document.createElement('span');
+      tTxt.className = 'cl-thread';
+      tTxt.textContent = 'Th' + (t + 1);
+      lbl.appendChild(tTxt);
+    }
+    coreLabelsCol.appendChild(lbl);
+  }
+
+  db.appendChild(coreLabelsCol);
+
+  // ── Row 2: Avg load squares (col 4) ──
+  const avgLoadCol = document.createElement('div');
+  avgLoadCol.className = 'avg-load-col';
+  for (const group of DATA.coreGroups) {
+    const grpDiv = document.createElement('div');
+    grpDiv.className = 'avg-load-group';
+    // Spacer for freq row
+    const spacer = document.createElement('div');
+    spacer.className = 'avg-load-spacer';
+    grpDiv.appendChild(spacer);
+    for (const lr of group.loadRows) {
+      const sq = document.createElement('div');
+      sq.className = 'avg-load-square';
+      const pct = lr.avgLoad;
+      sq.textContent = Math.round(pct) + '%';
+      sq.style.backgroundColor = pct > 0 ? heatColor(pct, 100) : 'rgba(0,180,0,0.35)';
+      grpDiv.appendChild(sq);
+    }
+    avgLoadCol.appendChild(grpDiv);
+  }
+  db.appendChild(avgLoadCol);
+
+  db.appendChild(center);
+
+  // ── Row 2: L3 vertical label (col 5) + L3 bar (col 6) ──
+  if (DATA.l3) {
+    const l3VL = document.createElement('div');
+    l3VL.className = 'l3-vlabel';
+    l3VL.textContent = 'L3 Cache Hit Rate';
+    db.appendChild(l3VL);
+    const l3Outer = document.createElement('div');
+    l3Outer.className = 'l3-outer';
+    l3Outer.appendChild(makeVCol(DATA.l3.hist, DATA.l3.globalMax, DATA.l3, 'l3-col'));
+    const l3Top = document.createElement('span');
+    l3Top.className = 'l3-scale-label';
+    l3Top.textContent = '100%';
+    l3Top.style.top = '-24px';
+    l3Outer.appendChild(l3Top);
+    const l3Bot = document.createElement('span');
+    l3Bot.className = 'l3-scale-label';
+    l3Bot.textContent = '0%';
+    l3Bot.style.bottom = '-24px';
+    l3Outer.appendChild(l3Bot);
+    db.appendChild(l3Outer);
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 2: DRAM vertical label (col 7) + DRAM bar (col 8) + DRAM scale (col 9) ──
+  if (DATA.dram) {
+    const dVL = document.createElement('div');
+    dVL.className = 'dram-vlabel';
+    dVL.textContent = 'DRAM Bandwidth';
+    db.appendChild(dVL);
+    db.appendChild(makeVCol(DATA.dram.hist, DATA.dram.globalMax, DATA.dram, 'dram-col'));
+    db.appendChild(makeVScale('dram-scale', DATA.dram.bucketMin, DATA.dram.bucketMax,
+      DATA.dram.unit, DATA.dram.step, 6, { multiLine: true }));
+  } else {
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+    db.appendChild(document.createElement('div'));
+  }
+
+  // ── Row 3: Bottom axis ──
+  const bSpacer = document.createElement('div');
+  bSpacer.className = 'bottom-spacer';
+  db.appendChild(bSpacer);
+  db.appendChild(makeAxis('bottom-axis', DATA.load.bucketMin, DATA.load.bucketMax,
+    DATA.load.unit, DATA.load.step, 10, '#8fd48f'));
+  const brSpacer = document.createElement('div');
+  brSpacer.className = 'bottom-right-spacer';
+  db.appendChild(brSpacer);
+
+  // ── Legend ──
+  const legend = document.getElementById('legend');
+  const items = [
+    { color: 'rgba(30,60,130,0.70)', label: 'Frequency (MHz)' },
+    { color: 'rgba(25,90,40,0.60)', label: 'Thread Load (%)' },
+  ];
+  if (DATA.power) items.push({ color: 'rgba(190,65,65,0.55)', label: 'CPU Power (W)' });
+  if (DATA.l3) items.push({ color: 'rgba(80,30,120,0.65)', label: 'L3 Hit Rate (%)' });
+  if (DATA.dram) items.push({ color: 'rgba(140,100,200,0.55)', label: 'DRAM BW (GB/s)' });
+
+  for (const it of items) {
+    const li = document.createElement('div'); li.className = 'legend-item';
+    const sw = document.createElement('div'); sw.className = 'legend-swatch';
+    sw.style.backgroundColor = it.color; li.appendChild(sw);
+    const txt = document.createElement('span'); txt.textContent = it.label; li.appendChild(txt);
+    legend.appendChild(li);
+  }
+  const gw = document.createElement('div'); gw.className = 'legend-gradient-wrap';
+  const gMin = document.createElement('span'); gMin.textContent = '0s'; gw.appendChild(gMin);
+  const canvas = document.createElement('canvas'); canvas.className = 'legend-gradient';
+  canvas.width = 140; canvas.height = 14;
+  const ctx = canvas.getContext('2d');
+  for (let x = 0; x < 140; x++) { ctx.fillStyle = heatColor(x/139, 1); ctx.fillRect(x,0,1,14); }
+  gw.appendChild(canvas);
+  const gMax = document.createElement('span'); gMax.textContent = 'max'; gw.appendChild(gMax);
+  legend.appendChild(gw);
+})();
+</script>
+</body>
+</html>
