@@ -1,4 +1,4 @@
-<img width="1238" height="942" alt="image" src="https://github.com/user-attachments/assets/8b397873-98a0-4d69-8045-39ea67acb89a" />
+<img width="1310" height="959" alt="image" src="https://github.com/user-attachments/assets/9d73065d-f2ce-49c8-a670-002a165994f1" />
 
 
 # CPU Sensor Heatmap
